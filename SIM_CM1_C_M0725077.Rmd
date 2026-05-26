@@ -1,0 +1,164 @@
+---
+title: "CM1 SIM"
+author: "M0725077_Zahra Binta Azhari"
+date: "2026-05-26"
+output: html_document
+---
+
+```{css, echo=FALSE}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+body { font-family: 'Inter', sans-serif; max-width: 860px; margin: 0 auto; padding: 20px 24px 60px; background: #f5f7fa; color: #1e2d3d; }
+
+.header { background: linear-gradient(135deg, #1A3A5C, #1D7A8C); color: white; padding: 40px; border-radius: 14px; margin-bottom: 28px; }
+.header h1 { margin: 0 0 8px; font-size: 1.8em; }
+.header p  { margin: 0; opacity: 0.85; font-size: 0.95em; }
+
+.card { background: white; border-radius: 12px; padding: 28px 32px; margin-bottom: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
+.card h2 { color: #1A3A5C; font-size: 1.1em; border-left: 4px solid #1D7A8C; padding-left: 12px; margin: 0 0 16px; }
+
+.insight { background: #e8f5ee; border-left: 4px solid #1D9E75; border-radius: 0 8px 8px 0; padding: 14px 18px; margin: 16px 0; font-size: 0.93em; }
+.insight strong { color: #1D9E75; }
+
+```
+
+<div class="header">
+  <h1>Analisis Database Sakila</h1>
+  <p>Sistem Informasi Manajemen &nbsp;|&nbsp; Case Method 1</p>
+</div>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load library, include=FALSE}
+# Memuat paket yang diperlukan untuk koneksi database dan visualisasi
+library(DBI)
+library(dplyr)
+library(ggplot2)
+library(scales)
+```
+
+```{r koneksi data, include=FALSE}
+# Koneksi ke database Sakila di MySQL
+con <- DBI::dbConnect(odbc::odbc(),
+                      Driver    = "MySQL ODBC 8.0 ANSI Driver", 
+                      Server    = "127.0.0.1",
+                      Database  = "sakila",
+                      UID       = "root",
+                      PWD       = "@Zhrabinn-1803", 
+                      Port      = 3306)
+```
+
+---
+
+<div class="card">
+<h2>Korelasi antara Durasi Sewa dan Jumlah Pembayaran</h2>
+
+### Deskripsi 
+Tujuan dari analisis ini adalah untuk membuktikan secara statistik apakah durasi pinjam film, dihitung dalam satuan hari, memiliki korelasi linear dengan jumlah biaya yang dibayar pelanggan. Memahami seberapa efektif skema penarifan pada sistem manajemen Sakila bergantung pada informasi ini.
+
+### Hipotesis
+- Hipotesis Nol ($H_0$): Tidak ada korelasi linear antara durasi peminjaman dan biaya yang dibayar ($\rho = 0$).
+- Hipotesis Alternatif ($H_1$): Terdapat korelasi linear antara durasi peminjaman dan biaya yang dibayar ($\rho \neq 0$).
+
+Koefisien korelasi Pearson ($r$) dihitung menggunakan rumus matematika berikut:$$r = \frac{\sum_{i=1}^{n} (X_i - \bar{X})(Y_i - \bar{Y})}{\sqrt{\sum_{i=1}^{n} (X_i - \bar{X})^2 \sum_{i=1}^{n} (Y_i - \bar{Y})^2}}$$Keterangan: $X$ merupakan durasi peminjaman (hari) dan $Y$ merupakan biaya bayar (USD).
+
+### Pengambilan Data & Analisis Data
+
+```{r data1}
+# Ambil data menggunakan DATEDIFF 
+df_korelasi <- dbGetQuery(con, "
+  SELECT 
+    DATEDIFF(r.return_date, r.rental_date) AS durasi_hari,
+    p.amount AS biaya_bayar
+  FROM rental r
+  JOIN payment p ON r.rental_id = p.rental_id
+  WHERE r.return_date IS NOT NULL
+")
+
+# Jalankan Uji Korelasi Pearson
+uji_korelasi <- cor.test(df_korelasi$durasi_hari, df_korelasi$biaya_bayar, method = "pearson")
+uji_korelasi
+```
+
+### Visualisasi
+
+```{r visualisasi1}
+ggplot(df_korelasi, aes(x = durasi_hari, y = biaya_bayar)) +
+  geom_jitter(color = "#1D7A8C", alpha = 0.2) + # Jitter digunakan agar titik tidak menumpuk
+  geom_smooth(method = "lm", color = "#C8882A", se = FALSE, size = 1.2) +
+  labs(
+    title = "Hubungan Antara Durasi Sewa dan Biaya Bayar",
+    subtitle = "Uji Korelasi Pearson pada Data Sakila",
+    x = "Durasi Peminjaman (Hari)",
+    y = "Biaya yang Dibayar (USD)"
+  ) +
+  theme_minimal()
+```
+
+### Interpretasi
+
+<div class="insight">
+<strong>Kesimpulan:</strong> Hasil uji korelasi Pearson menunjukkan bahwa ada nilai p-value yang sangat kecil (< 0.05), yang menunjukkan bahwa hubungan tersebut signifikan secara statistik, sehingga kami menolak $H_0$. 
+</div>
+
+Di sisi lain, nilai koefisien korelasi ($r$) yang diperoleh sangat dekat dengan angka 0, yang menunjukkan bahwa tidak ada hubungan linear antara kedua variabel. Secara bisnis, lamanya hari pengembalian film tidak berdampak signifikan pada besarnya tagihan karena Sakila menggunakan sistem tarif rata-rata, atau tarif tetap di awal, berdasarkan jenis film daripada sistem denda murni arloji harian yang berjalan akumulatif.
+
+</div>
+
+---
+
+<div class="card">
+<h2>Perbedaan Rata-rata Transaksi antar Toko</h2>
+
+### Deskripsi
+Toko Sakila terletak di dua lokasi perbelanjaan yang berbeda ada Toko 1 dan Toko 2. Dalam analisis ini, uji statistik inferensial Independent T-Test digunakan untuk menentukan apakah performa finansial, atau rata-rata nilai transaksi per kasir, di kedua toko tersebut memiliki perbedaan yang signifikan atau identik. 
+
+### Hipotesis
+- Hipotesis Nol ($H_0$): Rata-rata nominal transaksi di Store 1 sama dengan Store 2 ($\mu_1 = \mu_2$).
+- Hipotesis Alternatif ($H_1$): Rata-rata nominal transaksi di Store 1 tidak sama dengan Store 2 ($\mu_1 \neq \mu_2$).
+
+Uji statistik menggunakan rumus Welch's T-Test (asumsi varians tidak seragam):$$t = \frac{\bar{X}_1 - \bar{X}_2}{\sqrt{\frac{s_1^2}{n_1} + \frac{s_2^2}{n_2}}}$$
+
+### Pengambilan Data & Analisis Data
+
+```{r data2}
+# Ambil data ID Toko dan nominal pembayaran pelanggan
+df_ttest <- dbGetQuery(con, "
+  SELECT c.store_id, p.amount AS biaya_bayar
+  FROM payment p
+  JOIN customer c ON p.customer_id = c.customer_id
+")
+
+# Konversi store_id menjadi bentuk faktor/kategori
+df_ttest$store_id <- as.factor(df_ttest$store_id)
+
+# Jalankan Uji T-Test Independen
+uji_t <- t.test(biaya_bayar ~ store_id, data = df_ttest)
+uji_t
+```
+
+### Visualisasi
+
+```{r visualisasi2}
+ggplot(df_ttest, aes(x = store_id, y = biaya_bayar, fill = store_id)) +
+  geom_boxplot(alpha = 0.7, show.legend = FALSE) +
+  scale_fill_manual(values = c("1" = "#1A3A5C", "2" = "#1D7A8C")) +
+  labs(
+    title = "Perbandingan Nilai Transaksi antara Store 1 dan Store 2",
+    x = "ID Toko (Store ID)",
+    y = "Nominal Transaksi (USD)"
+  ) +
+  theme_minimal()
+```
+
+### Interpretasi
+
+<div class="insight">
+<strong>Kesimpulan:</strong> Hasilnya menunjukkan bahwa nilai p-value yang keluar pada konsol output harus diperhatikan: jika nilai <strong>p-value > 0.05</strong>, maka kita <strong>gagal menolak</strong> $H_0$.
+</div>
+
+Artinya, menunjukkan bahwa secara statistik tidak ada perbedaan rata-rata nominal transaksi yang signifikan. Profitabilitas rata-rata per transaksi belanja sama untuk kedua cabang toko. Semua cabang menunjukkan bahwa strategi pemasaran mereka, standarisasi harga, dan operasi kasir mereka berjalan dengan baik dan seimbang.
+
+</div>
